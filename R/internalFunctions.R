@@ -43,13 +43,14 @@
 }
 
 #' Run functions of ?apply family in parallel if possible
-#' @param X
+#' @param X object
 #' @param XFUN ?apply function. Currently c(sapply,lapply, apply)
 #' @param MARGIN integer. Margin for apply.
 #' @param FUN function to be ?applied
 #' @param envir Environment in which to look for objects to export. Usually this should be environment()
 #' @param ... further arguments passed to fun
 #' @keywords internal
+#' @noRd
 #' @examples
 #' \dontrun{
 #'  xList <- lapply(rep(1000,10000), rnorm)
@@ -61,7 +62,6 @@
 #'     endCluster()
 #'  }
 #' }
-#' @noRd 
 .parXapply <- function(X, XFUN, MARGIN, FUN, envir, ...){   
     
     call <- quote(f(cl = cl, X = X, FUN = FUN, MARGIN = MARGIN, ...))
@@ -133,7 +133,7 @@
     
     if(basename(x) == x | grepl("^[.][.]/", x))    x   <- file.path(getwd(),x)
     if(grepl("[.][.]", x)){
-        xs  <- str_split(x, "/")[[1]]
+        xs  <- strsplit(x, "/")[[1]]
         ups <- grep("[.][.]", xs)  
         rem <- c(ups, ups-length(ups))
         rem <- rem[rem > 1]
@@ -169,7 +169,7 @@
 .df2tab <- function(x, align){
     c(paste0("\\tabular{", align, "}{"),
             paste(paste("\\strong{", colnames(x), "}", collapse = " \\tab "), "\\cr" ),
-            paste(apply(x, 1, paste, collapse = " \\tab "), c(rep("\\cr", nrow(x)), "}")))
+            paste(apply(x, 1, paste, collapse = " \\tab "), c(rep("\\cr", nrow(x)-1), "}")))
 }
 
 #' Convert character to numric band
@@ -205,6 +205,16 @@
     extent(c(max(em[,1]), min(em[,2]), max(em[,3]), min(em[,4])))    
 }
 
+#' Get center coordinates of Extent object or any object from which an extent can be derived
+#' @param x Spatial object from which an extent can be derived
+#' @return Vector of length two with center coordinate
+#' @noRd 
+.extentCenter <- function(x){
+    c(xmax(x) + xmin(x), ymax(x) + ymin(x))/2 
+}
+
+
+
 #' Check haveminmax slot
 #' @param x Raster*
 #' @noRd 
@@ -216,6 +226,29 @@
         return(vapply(1:nlayers(x), function(xi) {x[[xi]]@data@haveminmax}, logical(1)))
     }
 }
+
+#' Subdivide polygons into smaller polygons
+#' @param polygons SpatialPolygonsDataFrame
+#' @param res Numeric. Spatial resolution of subdivition grid
+#' @noRd 
+#' @keywords internal
+.subdividePolys <- function(polygons, res = 1) {
+    pl <- lapply(seq_along(polygons), function(i){
+                ex       <- raster(polygons[i,])
+                res(ex)  <- res
+                pgrid <- rasterToPolygons(ex)
+                pgrid$layer = 1
+                pp    <- gIntersection(pgrid, polygons[i,], byid=TRUE, drop_lower_td = TRUE)
+                pp    <- as(pp, "SpatialPolygonsDataFrame")
+                pp$dummy <- polygons$layer[i]
+                names(pp) <- names(polygons)
+                pp
+            })
+    plo <- do.call("rbind", pl)
+    projection(plo) <- projection(polygons)
+    return(plo)
+}
+
 
 #' On package startup
 #' @noRd 

@@ -42,8 +42,12 @@ readMeta <- function(file, raw = FALSE){
                 })   
         names(meta) <- unique(l[,2])
         
-        num <- grep("IMAGE_AT|MIN_MAX|RESCAL|THERMAL", names(meta))
-        meta[num] <- lapply(meta[num], function(x) {x[,1] <- as.numeric(x[,1]);x})
+        ## Numeric slots
+        num <- grep("MIN_MAX|RESCAL|THERMAL", names(meta))      
+        meta[num] <- lapply(meta[num], function(x) {
+                    x[,1] <- as.numeric(x[,1])
+                    x
+                })
         
         if(raw) return(meta)
         
@@ -91,6 +95,9 @@ readMeta <- function(file, raw = FALSE){
         scal 	<- 1
         dtyp 	<- NA
         
+       ## Calculate ESUN the GRASS Way: https://grass.osgeo.org/grass64/manuals/i.landsat.toar.html
+      # esun <- pi * esd * r[grepl("MAXIMUM", rownames(r)),,drop = F][1:9,]/  reflMax[grepl("MAXIMUM", rownames(reflMax)),,drop = F]
+       
         
         ## RADIOMETRIC CORRECTION/RESCALING PARAMETERS     
         if(!legacy) { 	            
@@ -135,7 +142,7 @@ readMeta <- function(file, raw = FALSE){
     } else {
         ## PROCESS ESPA LEDAPS XML FILES
         meta <- xmlToList(xmlParse(file))
-        names(meta$bands) <- str_replace_all(unlist(sapply(meta$bands, "[", "long_name")), " ", "_")
+        names(meta$bands) <- gsub(" ", "_", unlist(sapply(meta$bands, "[", "long_name")))
         
         if(raw) return(meta)
         
@@ -143,7 +150,7 @@ readMeta <- function(file, raw = FALSE){
         atts 	<- sapply(meta$bands, "[", ".attrs") 
         sat		<- paste0("LANDSAT", .getNumeric(meta$global_metadata$satellite))
         sen 	<- meta$global_metadata$instrument
-        scene 	<- str_replace(meta$global_metadata$lpgs_metadata_file, "_MTL.txt", "")  ## could assemble name for legacy files: http://landsat.usgs.gov/naming_conventions_scene_identifiers.php
+        scene 	<- gsub("_MTL.txt", "", meta$global_metadata$lpgs_metadata_file)  ## could assemble name for legacy files: http://landsat.usgs.gov/naming_conventions_scene_identifiers.php
         date	<- as.POSIXct(paste(meta$global_metadata$acquisition_date,meta$global_metadata$scene_center_time), "%Y%m%d %H:%M:%S" )
         pdate	<- as.POSIXct(meta$bands[[1]]$production_date)
         path	<- as.numeric(meta$global_metadata$wrs["path"])
@@ -178,7 +185,7 @@ readMeta <- function(file, raw = FALSE){
     radRes	<- if(sat == "LANDSAT8") 16 else 8
     
     
-    obj <-  ImageMetaData(file = file, format = format, sat = sat, sen = sen, scene = scene, date = date, pdate = pdate, path = path, radRes=radRes, spatRes = spatRes, row = row, az = az,
+    ImageMetaData(file = file, format = format, sat = sat, sen = sen, scene = scene, date = date, pdate = pdate, path = path, radRes=radRes, spatRes = spatRes, row = row, az = az,
             selv = selv, esd = esd, files = files, bands = bands, quant = quant, cat = cat, na = na, vsat = vsat, scal = scal, dtyp = dtyp, 
             calrad=calrad, calref=calref, calbt=calbt, proj = proj)
     
@@ -252,7 +259,7 @@ ImageMetaData <- function(file = NA, format = NA, sat = NA, sen = NA, scene = NA
     obj$DATA <- obj$DATA[with(obj$DATA, order(factor(CATEGORY, levels = c("image", "pan", "index", "qa")),
                             .getNumeric(BANDS),
                             factor(QUANTITY, levels = c("dn", "tra", "tre", "sre", "bt", "idx"))
-                            )),]
+                    )),]
     
     structure(obj, class = c("ImageMetaData", "RStoolbox"))    
 }
